@@ -45,11 +45,15 @@ from gecosws_config_assistant.firstboot_lib.firstbootconfig import get_data_file
 import logging
 import traceback
 import os
-import pwd
-import grp
 import subprocess
 import base64
 import json
+
+import os
+
+if os.name != 'nt':
+    import pwd
+    import grp
 
 import gettext
 from gettext import gettext as _
@@ -150,6 +154,10 @@ class ConnectWithGecosCCController(object):
                  None)
             self.view.focusPasswordField()            
             return False
+
+        if os.name == 'nt':
+            self.logger.debug("SSL verification disabled on Windows PoC!")
+            SSLUtil.disableSSLCertificatesVerification()  
 
         if gecosAccessData.get_url().startswith('https://'):
             # Check server certificate
@@ -274,34 +282,35 @@ class ConnectWithGecosCCController(object):
             fd.truncate()
             fd.close()
 
-            # Check the owner and permissions
-            stat_info = os.stat(filename)
-            uid = stat_info.st_uid
-            gid = stat_info.st_gid
+            if os.name != 'nt':
+                # Check the owner and permissions
+                stat_info = os.stat(filename)
+                uid = stat_info.st_uid
+                gid = stat_info.st_gid
 
-            current_usr = pwd.getpwuid(uid)[0]
-            current_grp = grp.getgrgid(gid)[0]
-            
-            # Set the user to root
-            if current_usr != 'root':
-                uid = pwd.getpwnam('root').pw_uid
-                if uid is None:
-                    self.logger.error('Can not find user to be used as owner: ' + 'root')
-                else:
-                    os.chown(filename, uid, gid)  
+                current_usr = pwd.getpwuid(uid)[0]
+                current_grp = grp.getgrgid(gid)[0]
                 
-            if current_grp != 'root':
-                gid = grp.getgrnam('root').gr_gid
-                if gid is None:
-                    self.logger.error('Can not find group to be used as owner: ' + 'root')
-                else:
-                    os.chown(filename, uid, gid)  
-                
-            # Set permissions to 00600
-            mode = 00600
-            m = stat_info.st_mode & 00777
-            if m != mode:
-                os.chmod(filename, mode)
+                # Set the user to root
+                if current_usr != 'root':
+                    uid = pwd.getpwnam('root').pw_uid
+                    if uid is None:
+                        self.logger.error('Can not find user to be used as owner: ' + 'root')
+                    else:
+                        os.chown(filename, uid, gid)  
+                    
+                if current_grp != 'root':
+                    gid = grp.getgrnam('root').gr_gid
+                    if gid is None:
+                        self.logger.error('Can not find group to be used as owner: ' + 'root')
+                    else:
+                        os.chown(filename, uid, gid)  
+                    
+                # Set permissions to 00600
+                mode = 00600
+                m = stat_info.st_mode & 00777
+                if m != mode:
+                    os.chmod(filename, mode)
 
             # Write the content
             fd = open(filename, 'w')
@@ -323,17 +332,33 @@ class ConnectWithGecosCCController(object):
     
     def _clean_connection_files_on_error(self):
         self.logger.debug("_clean_connection_files_on_error")
-        self._remove_file('/etc/chef/validation.pem')
-        self._remove_file('/etc/chef/client.pem')        
-        self._remove_file('/etc/chef/client.rb')        
-        self._remove_file('/etc/chef/knife.rb')        
-        self._remove_file('/etc/chef.control')        
-        self._remove_file('/etc/gcc.control')        
+        if os.name == 'nt':
+            # Windows systems
+            self._remove_file('c:\\chef\\validation.pem')
+            self._remove_file('c:\\etc\\chef\\client.pem')        
+            self._remove_file('c:\\chef\\client.rb')        
+            self._remove_file('c:\\chef\\knife.rb')        
+            self._remove_file('c:\\etc\\chef.control')        
+            self._remove_file('c:\\etc\\gcc.control')        
+            
+        else:
+            # Unix systems
+            self._remove_file('/etc/chef/validation.pem')
+            self._remove_file('/etc/chef/client.pem')        
+            self._remove_file('/etc/chef/client.rb')        
+            self._remove_file('/etc/chef/knife.rb')        
+            self._remove_file('/etc/chef.control')        
+            self._remove_file('/etc/gcc.control')        
 
 
     def _clean_disconnection_files_on_error(self):
         self.logger.debug("_clean_disconnection_files_on_error")
-        self._remove_file('/etc/chef/validation.pem')
+        if os.name == 'nt':
+            # Windows systems        
+            self._remove_file('c:\\chef\\validation.pem')
+        else:
+            # Unix systems
+            self._remove_file('/etc/chef/validation.pem')
         
     
     def connect(self):
@@ -408,7 +433,11 @@ class ConnectWithGecosCCController(object):
             return False        
         
         # Save Chef client certificate in a PEM file
-        if not self._save_secure_file('/etc/chef/client.pem', client_pem):
+        client_pem_file = '/etc/chef/client.pem'
+        if os.name == 'nt':
+            client_pem_file = 'c:\\etc\\chef\\client.pem'
+        
+        if not self._save_secure_file(client_pem_file, client_pem):
             self.processView.setChefCertificateRetrievalStatus(_('ERROR'))
             self.processView.enableAcceptButton()
             showerror_gtk(_("There was an error while saving the client certificate"),
@@ -599,6 +628,9 @@ class ConnectWithGecosCCController(object):
         template = Template()
         template.source = get_data_file('templates/client.rb')
         template.destination = '/etc/chef/client.rb'
+        if os.name == 'nt':
+            template.destination = 'c:\\chef\\client.rb'
+
         template.owner = 'root'
         template.group = 'root'
         template.mode = 00644
@@ -623,9 +655,14 @@ class ConnectWithGecosCCController(object):
       
 
         self.logger.debug('- Linking the chef server ')
-        env = {'LANG': 'es_ES.UTF-8', 'LC_ALL': 'es_ES.UTF-8', 'HOME': os.environ['HOME']}
-        result = self._execute_command('chef-client -j /usr/share/gecosws-config-assistant/base.json', env)
-        self.logger.debug('chef-client -j /usr/share/gecosws-config-assistant/base.json --> %s'%(result))
+        env = {}
+        command = 'C:\\opscode\\chef\\bin\\chef-client.bat -j /usr/share/gecosws-config-assistant/base.json'
+        if os.name != 'nt':
+            env = {'LANG': 'es_ES.UTF-8', 'LC_ALL': 'es_ES.UTF-8', 'HOME': os.environ['HOME']}
+            command = 'chef-client -j /usr/share/gecosws-config-assistant/base.json'
+
+        result = self._execute_command(command, env)
+        self.logger.debug('%s --> %s'%(command, result))
         if not result:
             self.processView.setLinkToChefStatus(_('ERROR'))
             self.processView.enableAcceptButton()
@@ -696,7 +733,10 @@ class ConnectWithGecosCCController(object):
         self.processView.setCleanStatus(_('IN PROCESS'))
         
         # Clean setup files
-        self._remove_file('/etc/chef/validation.pem')
+        if os.name == 'nt':
+            self._remove_file('C:\\chef\\validation.pem')
+        else:        
+            self._remove_file('/etc/chef/validation.pem')
         
         self.processView.setCleanStatus(_('DONE'))
         self.processView.addProgressFraction(0.2)
@@ -713,12 +753,23 @@ class ConnectWithGecosCCController(object):
             # local disconnection
             self.logger.debug("Executing a local disconnection")
 
-            self._remove_file('/etc/gcc.control')
-            self._remove_file('/etc/chef.control')
-            self._remove_file('/etc/chef/client.rb')
-            self._remove_file('/etc/chef/client.pem')
-            self._remove_file('/etc/chef/validation.pem')
-            self._remove_file('/etc/chef/knife.rb')
+            if os.name == 'nt':
+                # Windows systems
+                self._remove_file('c:\\etc\\gcc.control')
+                self._remove_file('c:\\etc\\chef.control')
+                self._remove_file('c:\\chef\\client.rb')
+                self._remove_file('c:\\etc\\chef\\client.pem')
+                self._remove_file('c:\\chef\\validation.pem')
+                self._remove_file('c:\\chef\\knife.rb')
+            
+            else:
+                # Unix systems
+                self._remove_file('/etc/gcc.control')
+                self._remove_file('/etc/chef.control')
+                self._remove_file('/etc/chef/client.rb')
+                self._remove_file('/etc/chef/client.pem')
+                self._remove_file('/etc/chef/validation.pem')
+                self._remove_file('/etc/chef/knife.rb')
 
             self.logger.debug("DONE.")
             showwarning_gtk(_("Local disconnection done!"), self)
@@ -791,7 +842,11 @@ class ConnectWithGecosCCController(object):
             return False 
 
         self.logger.debug("- Remove client.pem")
-        if not self._remove_file('/etc/chef/client.pem'):
+        client_pem_file = '/etc/chef/client.pem'
+        if os.name == 'nt':
+            client_pem_file = 'c:\\etc\\chef\\client.pem'
+            
+        if not self._remove_file(client_pem_file):
             self.processView.setLinkToChefStatus(_('ERROR'))
             self.processView.enableAcceptButton()
             showerror_gtk(_("Can't remove /etc/chef/client.pem file"),
@@ -842,8 +897,14 @@ class ConnectWithGecosCCController(object):
         self.processView.setCleanStatus(_('IN PROCESS'))
         
         # Clean setup files
-        self._remove_file('/etc/chef/validation.pem')
-        self._remove_file('/etc/chef/knife.rb')
+        if os.name == 'nt':
+            # Windows systems
+            self._remove_file('c:\\chef\\validation.pem')
+            self._remove_file('c:\\chef\\knife.rb')
+        else:
+            # Unix systems
+            self._remove_file('/etc/chef/validation.pem')
+            self._remove_file('/etc/chef/knife.rb')
         
         self.processView.setCleanStatus(_('DONE'))
         self.processView.addProgressFraction(0.2)

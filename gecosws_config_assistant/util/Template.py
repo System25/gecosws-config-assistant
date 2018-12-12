@@ -22,9 +22,12 @@ __license__ = "GPL-2"
 
 import logging
 import traceback
-import grp
-import pwd
 import os
+
+if os.name != 'nt':
+    import grp
+    import pwd
+
 
 class Template(object):
     '''
@@ -113,31 +116,32 @@ class Template(object):
             with open(self.destination, 'w') as f:
                 f.write(contents)
                 
-            # Check the owner and permissions
-            stat_info = os.stat(self.destination)
-            uid = stat_info.st_uid
-            gid = stat_info.st_gid
+            if os.name != 'nt':
+                # Check the owner and permissions
+                stat_info = os.stat(self.destination)
+                uid = stat_info.st_uid
+                gid = stat_info.st_gid
 
-            current_usr = pwd.getpwuid(uid)[0]
-            current_grp = grp.getgrgid(gid)[0]
-            
-            if self.owner is not None and current_usr != self.owner:
-                uid = pwd.getpwnam(self.owner).pw_uid
-                if uid is None:
-                    self.logger.error('Can not find user to be used as owner: ' + self.owner)
-                else:
-                    os.chown(self.destination, uid, gid)  
+                current_usr = pwd.getpwuid(uid)[0]
+                current_grp = grp.getgrgid(gid)[0]
                 
-            if self.group is not None and current_grp != self.group:
-                gid = grp.getgrnam(self.group).gr_gid
-                if gid is None:
-                    self.logger.error('Can not find group to be used as owner: ' + self.group)
-                else:
-                    os.chown(self.destination, uid, gid)  
-                
-            m = stat_info.st_mode & 00777
-            if self.mode is not None and m != self.mode:
-                os.chmod(self.destination, self.mode)
+                if self.owner is not None and current_usr != self.owner:
+                    uid = pwd.getpwnam(self.owner).pw_uid
+                    if uid is None:
+                        self.logger.error('Can not find user to be used as owner: ' + self.owner)
+                    else:
+                        os.chown(self.destination, uid, gid)  
+                    
+                if self.group is not None and current_grp != self.group:
+                    gid = grp.getgrnam(self.group).gr_gid
+                    if gid is None:
+                        self.logger.error('Can not find group to be used as owner: ' + self.group)
+                    else:
+                        os.chown(self.destination, uid, gid)  
+                    
+                m = stat_info.st_mode & 00777
+                if self.mode is not None and m != self.mode:
+                    os.chmod(self.destination, self.mode)
                  
             return True
         

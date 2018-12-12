@@ -93,7 +93,7 @@ def redirect_to_log_file():
     
 if __name__ == '__main__':
     # Check root in Linux but not in Cygwin
-    if os.getuid() != 0 and not os.path.abspath(__file__).startswith('/cygdrive/'):
+    if os.name != 'nt' and os.getuid() != 0 and not os.path.abspath(__file__).startswith('/cygdrive/'):
        sys.stdout.write(_('You need to be root to run this program.'))
        sys.stdout.flush()
        sys.exit(1)

@@ -30,8 +30,14 @@ import traceback
 import os
 import hashlib
 import socket
-import fcntl
 import struct
+
+import os
+
+if os.name != 'nt':
+    import fcntl
+else:
+    import win32com.client
 
 from gecosws_config_assistant.firstboot_lib.firstbootconfig import get_data_file
 
@@ -92,9 +98,21 @@ class GecosAccessDataDAO(object):
         return data
 
     def _getHwAddr(self, ifname):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
-        return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1]  
+        if os.name != 'nt':
+            # Unix systems
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
+            return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1] 
+            
+        else:
+            # Windows systems
+            wmi = win32com.client.GetObject('winmgmts:')
+            adapters = wmi.InstancesOf('Win32_NetworkAdapterConfiguration')
+            for adapter in adapters:
+                if str(adapter.Properties_('Description')) == ifname:
+                    return str(adapter.Properties_('MACAddress'))
+
+            return False
 
     def calculate_workstation_node_name(self):
         networkDao = NetworkInterfaceDAO()

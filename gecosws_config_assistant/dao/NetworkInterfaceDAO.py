@@ -24,13 +24,19 @@ from gecosws_config_assistant.dto.NetworkInterface import NetworkInterface
 
 import logging
 
-import fcntl
 import array
 import struct
 import socket
 import platform
 import subprocess
 import traceback
+
+import os
+
+if os.name != 'nt':
+    import fcntl
+else:
+    import win32com.client
 
 class NetworkInterfaceDAO(object):
     '''
@@ -60,41 +66,53 @@ class NetworkInterfaceDAO(object):
         self.logger.debug('loadAll - BEGIN')
         interfaces = []
         
-        SIOCGIFCONF = 0x8912
-        MAXBYTES = 8096
-        
-        arch = platform.architecture()[0]
-        # I really don't know what to call these right now
-        var1 = -1
-        var2 = -1
-        if arch == '32bit':
-            var1 = 32
-            var2 = 32
-        elif arch == '64bit':
-            var1 = 16
-            var2 = 40
-        else:
-            raise OSError("Unknown architecture: %s" % arch)
-        
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        names = array.array('B', '\0' * MAXBYTES)
-        outbytes = struct.unpack('iL', fcntl.ioctl(
-            sock.fileno(),
-            SIOCGIFCONF,
-            struct.pack('iL', MAXBYTES, names.buffer_info()[0])
-            ))[0]
-        
-        namestr = names.tostring()
-        ifaces = [(namestr[i:i + var1].split('\0', 1)[0], socket.inet_ntoa(namestr[i + 20:i + 24])) \
-                for i in xrange(0, outbytes, var2)]
-        
-        for iface in ifaces:
-            interface = NetworkInterface()
-            interface.set_name(iface[0].strip())
-            interface.set_ip_address(iface[1].strip())
+        if os.name != 'nt':
+            # Unix systems
+            SIOCGIFCONF = 0x8912
+            MAXBYTES = 8096
             
-            interfaces.append(interface)
-        
+            arch = platform.architecture()[0]
+            # I really don't know what to call these right now
+            var1 = -1
+            var2 = -1
+            if arch == '32bit':
+                var1 = 32
+                var2 = 32
+            elif arch == '64bit':
+                var1 = 16
+                var2 = 40
+            else:
+                raise OSError("Unknown architecture: %s" % arch)
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            names = array.array('B', '\0' * MAXBYTES)
+            outbytes = struct.unpack('iL', fcntl.ioctl(
+                sock.fileno(),
+                SIOCGIFCONF,
+                struct.pack('iL', MAXBYTES, names.buffer_info()[0])
+                ))[0]
+            
+            namestr = names.tostring()
+            ifaces = [(namestr[i:i + var1].split('\0', 1)[0], socket.inet_ntoa(namestr[i + 20:i + 24])) \
+                    for i in xrange(0, outbytes, var2)]
+            
+            for iface in ifaces:
+                interface = NetworkInterface()
+                interface.set_name(iface[0].strip())
+                interface.set_ip_address(iface[1].strip())
+                
+                interfaces.append(interface)
+                
+        else:
+            # Windows systems
+            wmi = win32com.client.GetObject('winmgmts:')
+            adapters = wmi.InstancesOf('Win32_NetworkAdapterConfiguration')
+            for adapter in adapters:
+                if str(adapter.Properties_('IPAddress')) != 'None':
+                    interface = NetworkInterface()
+                    interface.set_name(str(adapter.Properties_('Description')))
+                    interface.set_ip_address(eval(str(adapter.Properties_('IPAddress')))[0])
+                    interfaces.append(interface)
         
         return interfaces
 

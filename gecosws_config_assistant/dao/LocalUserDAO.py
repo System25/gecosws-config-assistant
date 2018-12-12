@@ -23,10 +23,12 @@ __license__ = "GPL-2"
 from gecosws_config_assistant.dto.LocalUser import LocalUser
 
 import logging
-
-import pwd
 import subprocess
 
+import os
+
+if os.name != 'nt':
+    import pwd
 
 class LocalUserDAO(object):
     '''

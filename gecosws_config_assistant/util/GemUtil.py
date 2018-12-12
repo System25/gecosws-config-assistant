@@ -47,6 +47,11 @@ class GemUtil(object):
             self.command = "/usr/bin/gem"
             self.rubyEmbeddedInChef = False
 
+        if os.name == 'nt':
+            # Windows Chef installation
+            self.command = "c:\\opscode\\chef\\embedded\\bin\\gem"
+            self.rubyEmbeddedInChef = True
+
         self.commandUtil = CommandUtil()
         self.pm = PackageManager()
 

@@ -25,8 +25,10 @@ from gi.repository import Gtk, Gdk, Pango, GObject
 import logging
 import gettext
 from subprocess import Popen, PIPE
-import fcntl
 import os
+
+if os.name != 'nt':
+    import fcntl
 
 from gettext import gettext as _
 gettext.textdomain('gecosws-config-assistant')

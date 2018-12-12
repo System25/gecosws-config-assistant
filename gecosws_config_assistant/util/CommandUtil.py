@@ -26,6 +26,7 @@ import traceback
 import sys
 import time
 import select
+import os
 
 from gecosws_config_assistant.util.PasswordMaskingFilter import PasswordMaskingFilter
 
@@ -62,45 +63,66 @@ class CommandUtil(object):
         output = []
         self.logger.debug('CMD: %s',cmd)
         try:
-            p = subprocess.Popen(cmd, shell=True, 
-                                 stdout=subprocess.PIPE, 
-                                 stderr=subprocess.STDOUT,
-                                 stdin=subprocess.PIPE, 
-                                 env=my_env)
+            if os.name == 'nt':
+                # Windows systems
+                p = subprocess.Popen(cmd, shell=True, 
+                                     stdout=subprocess.PIPE, 
+                                     stderr=subprocess.STDOUT)
 
-            # Read the process output with a timeout
-            line = ''
-            previous_line = ''
-            c = p.stdout.read(1)
-            lastread = int(round(time.time() * 1000))
-            read = True
-            while c:
-                if read:
-                    read = False 
+                # Read the process output with a timeout
+                line = ''
+                c = p.stdout.read(1)
+                while c:
                     line += c
 
                     if c == '\n':
                         self.logger.debug(line)
                         output.append(line.strip())
-                        previous_line = line
                         line = ''
-    
-                r, w, e = select.select([ p.stdout ], [], [], 0.050)
-                if p.stdout in r:
+                        
                     c = p.stdout.read(1)
-                    lastread = int(round(time.time() * 1000))
-                    read = True
-
-                # Try to detect when the command waits for a yes/no question
-                if (int(round(time.time() * 1000)) - lastread > self.timeout and
-                    (line.find('?') > 0 or  previous_line.find('?') > 0)):
-                    self.logger.debug('QUESTION DETECTED: %s'%(line))
-                    response =  askyesno_gtk(cmd, "\n".join(output), None)
                     
-                    if response:
-                        p.stdin.write('y\n')
-                    else:
-                        p.stdin.write('n\n')
+            else:
+                # Unix systems
+                p = subprocess.Popen(cmd, shell=True, 
+                                     stdout=subprocess.PIPE, 
+                                     stderr=subprocess.STDOUT,
+                                     stdin=subprocess.PIPE, 
+                                     env=my_env)
+
+                # Read the process output with a timeout
+                line = ''
+                previous_line = ''
+                c = p.stdout.read(1)
+                lastread = int(round(time.time() * 1000))
+                read = True
+                while c:
+                    if read:
+                        read = False 
+                        line += c
+
+                        if c == '\n':
+                            self.logger.debug(line)
+                            output.append(line.strip())
+                            previous_line = line
+                            line = ''
+        
+                    r, w, e = select.select([ p.stdout ], [], [], 0.050)
+                    if p.stdout in r:
+                        c = p.stdout.read(1)
+                        lastread = int(round(time.time() * 1000))
+                        read = True
+
+                    # Try to detect when the command waits for a yes/no question
+                    if (int(round(time.time() * 1000)) - lastread > self.timeout and
+                        (line.find('?') > 0 or  previous_line.find('?') > 0)):
+                        self.logger.debug('QUESTION DETECTED: %s'%(line))
+                        response =  askyesno_gtk(cmd, "\n".join(output), None)
+                        
+                        if response:
+                            p.stdin.write('y\n')
+                        else:
+                            p.stdin.write('n\n')
                     
             retval = p.wait()
             if retval != 0:

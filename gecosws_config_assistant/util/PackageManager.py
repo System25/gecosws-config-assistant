@@ -23,7 +23,7 @@ __license__ = "GPL-2"
 import logging
 import traceback
 import re
-
+import os
 
 class PackageManager(object):
     '''
@@ -44,6 +44,10 @@ class PackageManager(object):
             raise ValueError('package_name is None')
 
         self.logger.debug('is_package_installed(%s)'%(package_name))
+
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return True
 
         
         try:
@@ -68,6 +72,10 @@ class PackageManager(object):
         
         self.logger.debug('exists_package(%s)'%(package_name))
         
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return True
+        
         try:
             import apt
             cache = apt.Cache()
@@ -88,6 +96,10 @@ class PackageManager(object):
             raise ValueError('package_name is None')
         
         self.logger.debug('upgrade_package(%s)'%(package_name))
+        
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return True
         
         try:
             import apt
@@ -130,6 +142,10 @@ class PackageManager(object):
         
         self.logger.debug('install_package(%s)'%(package_name))
         
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return True
+        
         try:
             import apt
             cache = apt.Cache()
@@ -161,6 +177,10 @@ class PackageManager(object):
 
     def update_cache(self):
         self.logger.debug('update_cache - BEGIN')
+        
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return True
         
         try:
             import apt
@@ -209,6 +229,10 @@ class PackageManager(object):
         
         self.logger.debug('get_package_version(%s)'%(package_name))
         
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return '0.0.0-windows'
+        
         
         try:
             import apt
@@ -240,6 +264,9 @@ class PackageManager(object):
         
         self.logger.debug('remove_package(%s)'%(package_name))
         
+        if os.name == 'nt':
+            self.logger.info('No package manager in Windows')
+            return True        
         
         try:
             import apt

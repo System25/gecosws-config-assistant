@@ -26,6 +26,7 @@ from gecosws_config_assistant.util.Template import Template
 
 import logging
 import traceback
+import os
 
 from gecosws_config_assistant.firstboot_lib.firstbootconfig import get_data_file
 
@@ -70,6 +71,10 @@ class NTPServerDAO(object):
     def load(self):
         self.logger.debug('load - BEGIN')
         ntpServer = None
+        
+        if os.name == 'nt':
+            self.logger.info('Ignore NTP service in Windows')
+            return 'localhost'
         
         if self.initiated:
             # Get server from data file
